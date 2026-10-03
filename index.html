@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Hook Factory — 1 photo → plein de vidéos surprises</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root {
+        --bg: #0e0e12; --panel: #17171d; --panel-2: #1f1f27; --border: #2a2a35;
+        --ink: #f5f5f7; --ink-dim: #9a9aa8; --ink-faint: #5a5a68;
+        --success: #34d399; --error: #f87171; --warn: #fbbf24; --info: #818cf8;
+        --accent: #a855f7; --radius: 14px;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background: var(--bg); color: var(--ink); min-height: 100vh;
+        padding: 1.5rem 1rem 6rem; font-size: 15px; line-height: 1.5;
+        max-width: 900px; margin: 0 auto;
+    }
+    header { margin-bottom: 1.5rem; text-align: center; }
+    h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.3rem;
+         background: linear-gradient(90deg, #a855f7, #ec4899, #f59e0b);
+         -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { font-size: 0.82rem; color: var(--ink-dim); }
+
+    .toast {
+        position: fixed; top: 1.5rem; left: 50%;
+        transform: translateX(-50%) translateY(-120px);
+        background: var(--ink); color: #0e0e12;
+        padding: 0.85rem 1.4rem; border-radius: 10px;
+        font-size: 0.85rem; font-weight: 600;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        z-index: 1000; opacity: 0;
+        transition: transform 0.35s ease, opacity 0.35s ease;
+        max-width: 90vw; text-align: center;
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.success { background: var(--success); color: #052e1a; }
+    .toast.error { background: var(--error); color: #450a0a; }
+    .toast.warn { background: var(--warn); color: #451a03; }
+
+    .info-banner {
+        background: linear-gradient(135deg, rgba(168,85,247,0.12), rgba(236,72,153,0.08));
+        border-left: 3px solid var(--accent);
+        padding: 0.85rem 1rem; border-radius: 10px;
+        font-size: 0.8rem; color: #d8d8e0;
+        margin-bottom: 1rem; line-height: 1.5;
+    }
+    .info-banner strong { color: #fff; }
+
+    .panel {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+    .panel-title {
+        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+        color: var(--ink-dim); font-weight: 700; margin-bottom: 0.7rem;
+    }
+
+    .api-key-input {
+        width: 100%; padding: 0.85rem 1rem;
+        border-radius: 10px; border: 1px solid var(--border);
+        background: var(--panel-2); color: var(--ink);
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.85rem; margin-bottom: 0.6rem;
+    }
+    .api-key-input:focus { outline: none; border-color: var(--accent); }
+
+    .btn {
+        width: 100%; padding: 0.85rem 1.2rem;
+        border-radius: 10px; border: none;
+        background: var(--panel-2); color: var(--ink);
+        font-size: 0.9rem; font-weight: 600; font-family: inherit;
+        cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+        margin-bottom: 0.5rem;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn.primary {
+        background: linear-gradient(135deg, #a855f7, #ec4899);
+        color: #fff; font-size: 1rem; padding: 1.1rem;
+        box-shadow: 0 8px 24px rgba(168,85,247,0.3);
+    }
+    .btn.primary:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+    .btn.stop { background: transparent; border: 1px solid var(--error); color: var(--error); display: none; }
+    .btn.stop.visible { display: block; }
+
+    .api-status {
+        font-size: 0.75rem; padding: 0.6rem 0.85rem;
+        border-radius: 8px; margin-top: 0.4rem;
+        display: flex; align-items: center; gap: 0.5rem;
+        background: var(--panel-2); color: var(--ink-dim);
+        transition: all 0.3s;
+    }
+    .api-status.ok { background: rgba(52,211,153,0.12); color: var(--success); font-weight: 600; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
+    .api-status.ok .dot { background: var(--success); }
+    .api-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.5rem; }
+    .api-hint a { color: var(--accent); text-decoration: underline; }
+
+    .upload-zone {
+        border: 2px dashed var(--border); border-radius: var(--radius);
+        padding: 2.5rem 1rem; text-align: center; cursor: pointer;
+        transition: all 0.2s; margin-bottom: 1rem;
+        background: var(--panel);
+    }
+    .upload-zone:active { border-color: var(--accent); background: var(--panel-2); }
+    .upload-zone.has-image { border-style: solid; border-color: var(--accent); padding: 0; overflow: hidden; }
+    .upload-zone input[type="file"] { display: none; }
+    .upload-icon { font-size: 2.5rem; margin-bottom: 0.6rem; opacity: 0.7; }
+    .upload-text { font-size: 1rem; color: var(--ink); margin-bottom: 0.3rem; font-weight: 600; }
+    .upload-hint { font-size: 0.75rem; color: var(--ink-dim); }
+
+    .preview-wrap { position: relative; }
+    .preview-wrap img { width: 100%; display: block; max-height: 60vh; object-fit: contain; background: #000; }
+    .preview-wrap .replace-overlay {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        background: linear-gradient(transparent, rgba(0,0,0,0.85));
+        padding: 1.5rem 1rem 0.9rem;
+        text-align: center; font-size: 0.8rem; color: #fff; font-weight: 600;
+    }
+
+    .count-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
+    .count-label { font-size: 0.82rem; color: var(--ink-dim); flex-shrink: 0; }
+    .count-display {
+        font-size: 1.8rem; font-weight: 800; color: var(--accent);
+        min-width: 3rem; text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    input[type="range"] {
+        -webkit-appearance: none; appearance: none;
+        flex: 1; height: 6px; border-radius: 3px;
+        background: var(--panel-2); outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: linear-gradient(135deg, #a855f7, #ec4899);
+        cursor: pointer; box-shadow: 0 2px 8px rgba(168,85,247,0.5);
+    }
+    input[type="range"]::-moz-range-thumb {
+        width: 22px; height: 22px; border-radius: 50%; border: none;
+        background: linear-gradient(135deg, #a855f7, #ec4899);
+        cursor: pointer;
+    }
+
+    .toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    .toggle {
+        flex: 1 1 calc(50% - 0.25rem);
+        padding: 0.7rem 0.8rem; border-radius: 10px;
+        border: 1px solid var(--border); background: var(--panel-2);
+        font-size: 0.78rem; cursor: pointer;
+        display: flex; align-items: center; gap: 0.5rem;
+        transition: all 0.15s; user-select: none;
+    }
+    .toggle:active { transform: scale(0.97); }
+    .toggle.on { border-color: var(--accent); background: rgba(168,85,247,0.12); }
+    .toggle .t-check {
+        width: 16px; height: 16px; border-radius: 4px;
+        border: 2px solid var(--ink-faint); flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; color: transparent;
+    }
+    .toggle.on .t-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .queue { margin-top: 1rem; }
+    .queue-summary {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 0.8rem 1rem; margin-bottom: 0.6rem;
+        font-size: 0.8rem; display: flex; justify-content: space-between;
+        flex-wrap: wrap; gap: 0.4rem;
+    }
+    .queue-summary .progress-text { font-weight: 700; color: var(--accent); }
+
+    .queue-item {
+        display: flex; align-items: center; gap: 0.7rem;
+        padding: 0.75rem 0.85rem; border-radius: 10px;
+        border: 1px solid var(--border); margin-bottom: 0.45rem;
+        background: var(--panel); transition: all 0.3s;
+        font-size: 0.82rem;
+    }
+    .queue-item.pending { opacity: 0.45; }
+    .queue-item.creating { border-color: var(--warn); }
+    .queue-item.processing { border-color: var(--accent); }
+    .queue-item.done { border-color: var(--success); }
+    .queue-item.failed { border-color: var(--error); }
+    .q-icon { font-size: 1.1rem; width: 1.5rem; text-align: center; flex-shrink: 0; }
+    .q-info { flex: 1; min-width: 0; }
+    .q-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .q-style { font-size: 0.7rem; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+    .q-status { font-size: 0.7rem; color: var(--ink-dim); text-align: right; flex-shrink: 0; max-width: 30%; }
+
+    .gallery-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.8rem; margin-top: 1rem;
+    }
+    .gallery-item {
+        border-radius: var(--radius); overflow: hidden;
+        border: 1px solid var(--border); background: #000;
+        animation: fadeIn 0.5s ease;
+    }
+    .gallery-item video { width: 100%; display: block; aspect-ratio: 9/16; object-fit: cover; }
+    .gallery-item .g-caption { padding: 0.5rem 0.7rem; background: var(--panel); font-size: 0.7rem; color: var(--ink-dim); line-height: 1.3; }
+    .gallery-item .g-caption strong { color: var(--ink); display: block; font-size: 0.75rem; margin-bottom: 2px; }
+
+    .status-bar {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        background: #000; color: #fff; padding: 0.85rem 1rem;
+        font-size: 0.8rem; display: flex; align-items: center; gap: 0.7rem;
+        transform: translateY(100%); transition: transform 0.3s;
+        z-index: 100; border-top: 1px solid var(--border);
+    }
+    .status-bar.visible { transform: translateY(0); }
+    .spinner {
+        width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2);
+        border-top-color: var(--accent); border-radius: 50%;
+        animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    .section-title {
+        font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--ink-dim); font-weight: 700; margin: 1.5rem 0 0.8rem;
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Hook Factory</h1>
+    <p class="subtitle">1 photo → plein de vidéos surprises pour TikTok</p>
+</header>
+
+<div class="info-banner">
+    <strong>Comment ça marche :</strong> ajoute <strong>une seule photo</strong>, choisis le nombre de vidéos,
+    et l'application invente <strong>un style aléatoire différent</strong> pour chacune : ambiance, transformation,
+    mouvement, caméra, lumière, action. Parfait pour tester plein de hooks TikTok d'un coup.
+</div>
+
+<div class="panel">
+    <div class="panel-title">🔑 Clé API</div>
+    <input type="password" class="api-key-input" id="api-key-input"
+           placeholder="Collez votre clé API ici (sk-...)" autocomplete="off" spellcheck="false">
+    <button type="button" class="btn" id="api-save-btn">Enregistrer la clé</button>
+    <div class="api-status" id="api-status">
+        <span class="dot"></span>
+        <span id="api-status-text">Aucune clé API enregistrée</span>
+    </div>
+    <div class="api-hint">
+        Clé gratuite sur <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a> → Settings → API Keys
+    </div>
+</div>
+
+<div class="upload-zone" id="upload-zone">
+    <input type="file" id="file-input" accept="image/*">
+    <div class="upload-icon">📸</div>
+    <div class="upload-text">Ajoute ta photo</div>
+    <div class="upload-hint">Une seule image — elle deviendra plein de vidéos</div>
+</div>
+
+<div id="preview-container"></div>
+
+<div class="panel">
+    <div class="panel-title">🎬 Nombre de vidéos à générer</div>
+    <div class="count-row">
+        <span class="count-label">Vidéos</span>
+        <input type="range" id="count-range" min="1" max="20" value="5" step="1">
+        <span class="count-display" id="count-display">5</span>
+    </div>
+
+    <div class="panel-title" style="margin-top:1.2rem;">🎲 Univers aléatoires à mélanger</div>
+    <div class="toggles" id="toggles"></div>
+
+    <div class="panel-title" style="margin-top:1.2rem;">📐 Format</div>
+    <div class="toggles">
+        <div class="toggle on" data-format="9:16">📱 9:16 — TikTok / Reels / Shorts</div>
+        <div class="toggle" data-format="1:1">⬛ 1:1 — Feed carré</div>
+    </div>
+</div>
+
+<button type="button" class="btn primary" id="generate-btn" disabled>
+    Créer les vidéos
+</button>
+
+<button type="button" class="btn stop" id="stop-btn">
+    ⏹ Arrêter la génération
+</button>
+
+<div class="queue" id="queue" style="display:none;"></div>
+
+<div id="gallery-section" style="display:none;">
+    <div class="section-title">✨ Vidéos générées</div>
+    <div class="gallery-grid" id="gallery-grid"></div>
+</div>
+
+<div class="status-bar" id="status-bar">
+    <div class="spinner"></div>
+    <span id="status-text">Préparation…</span>
+</div>
+
+<div class="toast" id="toast">
+    <span id="toast-text">Message</span>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ══════════════════════════════════════════════════════════════════
+const API_BASE = 'https://apihub.agnes-ai.com/v1';
+const POLL_BASE = 'https://apihub.agnes-ai.com/agnesapi';
+const MODEL_VIDEO = 'agnes-video-v2.0';
+const FRAME_RATE = 24;
+
+let createIntervalMs = 62000;
+const CREATE_INTERVAL_MIN = 62000;
+const CREATE_INTERVAL_MAX = 90000;
+const CREATE_INTERVAL_SAFE = 75000;
+
+const POLL_INTERVAL_SEC = 8;
+const MAX_POLL_ATTEMPTS = 120;
+
+const API_KEY_STORAGE = 'hookfactory_api_key';
+const MAX_IMAGE_SIZE = 12 * 1024 * 1024;
+const THUMBNAIL_MAX_WIDTH = 200;
+
+// ══════════════════════════════════════════════════════════════════
+// UNIVERS DE STYLES ALÉATOIRES
+// ══════════════════════════════════════════════════════════════════
+
+const AMBIANCE_STYLES = [
+    { id: 'cinematic',      name: 'Cinématique',      emoji: '🎬', prompt: 'cinematic film look, dramatic lighting, subtle film grain, shallow depth of field, professional color grading, movie-like atmosphere, 35mm film aesthetic' },
+    { id: 'golden-hour',    name: 'Golden Hour',      emoji: '🌅', prompt: 'golden hour warm sunlight, soft amber glow, long shadows, luminous atmosphere, hazy warm tones, sun flare' },
+    { id: 'bw',             name: 'Noir & Blanc',     emoji: '⚫', prompt: 'elegant black and white, high contrast monochrome, deep blacks and luminous whites, classic photography' },
+    { id: 'pastel-dream',   name: 'Pastel Rêveur',    emoji: '🌸', prompt: 'soft pastel color palette, dreamy diffused light, gentle dreamlike atmosphere, subtle glow, airy softness' },
+    { id: 'neon-urban',     name: 'Néon Urbain',      emoji: '🌆', prompt: 'neon-soaked night atmosphere, colorful reflections, cinematic urban glow, magenta and cyan accents, wet asphalt reflections' },
+    { id: 'vintage-super8', name: 'Vintage Super 8',  emoji: '📽️', prompt: 'vintage Super 8 film aesthetic, grainy texture, subtle vignette, warm faded colors, soft focus edges, light leaks' },
+    { id: 'dramatic',       name: 'Contraste Dramatique', emoji: '🌓', prompt: 'high contrast dramatic lighting, deep shadows, bright highlights, chiaroscuro effect, powerful mood' },
+    { id: 'misty',          name: 'Brume Mystique',   emoji: '🌫️', prompt: 'atmospheric mist, soft haze, diffused glowing light, mystical fog, ethereal atmosphere, dreamy depth' },
+    { id: 'chiaroscuro',    name: 'Chiaroscuro',      emoji: '🕯️', prompt: 'chiaroscuro painting lighting, single source of warm light, deep surrounding darkness, Renaissance atmosphere' },
+    { id: 'tropical',       name: 'Tropical Saturé',  emoji: '🌴', prompt: 'vibrant tropical color palette, saturated warm colors, lush green and turquoise, sunny paradise vibe' },
+    { id: 'moonlight',      name: 'Clair de Lune',    emoji: '🌙', prompt: 'cool moonlight atmosphere, blue and silver tones, soft lunar glow, peaceful night mood, starry ambience' },
+    { id: 'sunrise',        name: 'Aube Douce',       emoji: '🌄', prompt: 'dawn light, soft pink and pale blue sky tones, gentle awakening atmosphere, fresh morning air' },
+    { id: 'horror',         name: 'Horreur',          emoji: '👻', prompt: 'horror movie atmosphere, unsettling shadows, desaturated cold tones, creeping dread, faint flickering light' },
+    { id: 'fantasy',        name: 'Fantasy Magique',  emoji: '🧙', prompt: 'enchanted fantasy atmosphere, magical glowing particles, ethereal light, mystical forest energy, otherworldly beauty' },
+    { id: 'cyberpunk',      name: 'Cyberpunk',        emoji: '🌃', prompt: 'cyberpunk futuristic aesthetic, neon pink and cyan lighting, holographic advertisements, rainy reflective streets, Blade Runner atmosphere' },
+    { id: 'steampunk',      name: 'Steampunk',        emoji: '⚙️', prompt: 'steampunk aesthetic, brass and copper tones, steam and gears, Victorian retro-futurism, warm amber light' },
+    { id: 'scifi',          name: 'Science-Fiction',  emoji: '🚀', prompt: 'science fiction atmosphere, futuristic clean light, cosmic scale, strange alien technology, awe and mystery' },
+    { id: 'dream',          name: 'Onirique',         emoji: '💭', prompt: 'surreal dreamlike atmosphere, impossible soft light, floating particles, reality slightly bending, hypnagogic mood' },
+    { id: 'fire',           name: 'Feu & Braises',    emoji: '🔥', prompt: 'fire and ember atmosphere, warm orange glow, floating sparks, smoke, heat haze, primal energy' },
+    { id: 'ice',            name: 'Glace & Givre',    emoji: '❄️', prompt: 'icy frozen atmosphere, cold blue tones, frost crystals, breath vapor, glacial stillness, pale winter light' },
+];
+
+const TRANSFORM_STYLES = [
+    { id: 'none',        name: 'Aucune (photo gardée)', emoji: '🖼️', prompt: '' },
+    { id: 'anime',       name: 'Anime / Manga',         emoji: '🌸', prompt: 'Transform the entire image into high-quality anime style, cel-shaded, vibrant colors, Japanese animation aesthetic, expressive character design' },
+    { id: 'ghibli',      name: 'Studio Ghibli',         emoji: '🌿', prompt: 'Transform the entire image into Studio Ghibli anime style, Hayao Miyazaki aesthetic, hand-painted watercolor backgrounds, soft nostalgic atmosphere' },
+    { id: 'simpson',     name: 'Les Simpson',           emoji: '🍩', prompt: 'Transform the entire image into The Simpsons cartoon style, yellow-skinned characters, thick black outlines, flat saturated colors, Matt Groening art style' },
+    { id: 'pixar',       name: 'Pixar 3D',              emoji: '✨', prompt: 'Transform the entire image into high-quality 3D computer animation, Pixar-style rendering, subsurface scattering, cinematic lighting, expressive 3D characters' },
+    { id: 'comic',       name: 'BD Franco-Belge',       emoji: '📘', prompt: 'Transform the entire image into Franco-Belgian bande dessinée style, ligne claire technique, uniform clean ink outlines, flat vivid colors' },
+    { id: 'watercolor',  name: 'Aquarelle',             emoji: '🎨', prompt: 'Transform the entire image into dreamy watercolor painting aesthetic, soft bleeding edges, translucent washes, visible paper texture' },
+    { id: 'oil',         name: 'Peinture à l\'huile',   emoji: '🖼️', prompt: 'Transform the entire image into classical oil painting style, visible impasto brushstrokes, rich textured paint, old master technique' },
+    { id: 'claymation',  name: 'Claymation',            emoji: '🧱', prompt: 'Transform the entire image into claymation stop-motion animation, plasticine texture, fingerprint details, Aardman Studios style' },
+    { id: 'cyberpunk-t', name: 'Cyberpunk',             emoji: '🌃', prompt: 'Transform the entire image into cyberpunk futuristic aesthetic, neon pink and cyan lighting, holographic advertisements, Blade Runner atmosphere' },
+    { id: 'vaporwave',   name: 'Vaporwave',             emoji: '🌴', prompt: 'Transform the entire image into vaporwave aesthetic, nostalgic 90s imagery, pastel gradient, VHS quality, Greek statues and palm trees' },
+    { id: 'pixel',       name: 'Pixel Art',             emoji: '👾', prompt: 'Transform the entire image into detailed pixel art, 16-bit SNES style, crisp pixels, limited color palette, retro video game aesthetic' },
+    { id: 'lowpoly',     name: 'Low Poly 3D',           emoji: '💎', prompt: 'Transform the entire image into low poly 3D style, geometric faceted surfaces, flat shading, minimalist 3D render aesthetic' },
+    { id: 'neon-line',   name: 'Néon Line Art',         emoji: '💡', prompt: 'Transform the entire image into glowing neon line art on black background, single continuous lines of light, dark void, luminous outlines' },
+    { id: 'hologram',    name: 'Hologramme',            emoji: '🔷', prompt: 'Transform the entire image into a holographic projection, transparent glowing cyan, scan lines, glitchy edges, sci-fi hologram' },
+    { id: 'pop-art',     name: 'Pop Art',               emoji: '🎨', prompt: 'Transform the entire image into Pop Art style, Andy Warhol influence, bold flat colors, halftone dots, screen print aesthetic' },
+    { id: 'surreal',     name: 'Surréaliste',           emoji: '🌀', prompt: 'Transform the entire image into surrealist aesthetic, impossible juxtapositions, dreamlike distortions, Salvador Dali influence' },
+    { id: 'sketch',      name: 'Croquis Crayon',        emoji: '✏️', prompt: 'Transform the entire image into detailed pencil sketch, graphite shading, paper texture, hand-drawn illustration style' },
+    { id: 'noir-t',      name: 'Film Noir',             emoji: '🕵️', prompt: 'Transform the entire image into classic film noir aesthetic, high contrast black and white, dramatic chiaroscuro, 1940s detective atmosphere' },
+    { id: 'thermal',     name: 'Thermique',             emoji: '🌡️', prompt: 'Transform the entire image into thermal infrared camera aesthetic, heat map colors, glowing orange and blue gradients' },
+];
+
+const MOVEMENT_STYLES = [
+    { name: 'Respiration',         prompt: 'the subject breathes slowly, chest rising and falling subtly' },
+    { name: 'Vent dans les cheveux', prompt: 'a gentle breeze moves the subject\'s hair and clothing' },
+    { name: 'Regard intense',      prompt: 'the subject slowly opens their eyes and looks directly at the camera with intense gaze' },
+    { name: 'Lenteur hypnotique',  prompt: 'the subject moves in extreme slow motion, every gesture deliberate and hypnotic' },
+    { name: 'Reaching hand',       prompt: 'the subject slowly extends a hand toward the camera, fingers trembling slightly' },
+    { name: 'Turn of the head',    prompt: 'the subject slowly turns their head, revealing new angles of their face' },
+    { name: 'Emotional tear',      prompt: 'a single tear rolls down the subject\'s cheek in extreme slow motion' },
+    { name: 'Walking forward',     prompt: 'the subject walks slowly toward the camera, each step deliberate' },
+    { name: 'Shiver of emotion',   prompt: 'the subject\'s body shivers involuntarily, a wave of emotion passing through' },
+    { name: 'Opening revelation',  prompt: 'the subject looks down at their hands, discovering them for the first time' },
+    { name: 'Lean forward',        prompt: 'the subject leans forward slightly, closing the distance with the viewer' },
+    { name: 'Subtle smile',        prompt: 'a subtle smile appears slowly on the subject\'s face, transforming their expression' },
+];
+
+const CAMERA_STYLES = [
+    { name: 'Dolly-in lent',       prompt: 'slow dolly-in, camera gliding forward almost imperceptibly' },
+    { name: 'Orbite 360°',         prompt: 'slow 360 degree orbit around the subject, revealing every angle' },
+    { name: 'Drone ascension',     prompt: 'drone shot slowly rising above the subject, revealing the environment' },
+    { name: 'Parallaxe 2.5D',      prompt: 'subtle parallax 2.5D movement creating depth from the 2D image' },
+    { name: 'Travelling latéral',  prompt: 'slow lateral tracking shot, revealing new details left to right' },
+    { name: 'Push-in dramatique',  prompt: 'dramatic slow push-in toward the subject\'s face' },
+    { name: 'Pull-out révélation', prompt: 'slow pull-out revealing the context around the subject' },
+    { name: 'Caméra épaule',       prompt: 'handheld camera with slight tremor, organic and intimate' },
+    { name: 'Static contemplatif', prompt: 'static locked-off frame, only the subject moves within fixed borders' },
+    { name: 'Tilt up dramatique',  prompt: 'dramatic tilt-up from bottom to top, revealing the subject' },
+    { name: 'Rack focus',          prompt: 'rack focus shifting between foreground and subject' },
+    { name: 'Zoom vertigo',        prompt: 'vertigo dolly zoom effect, background stretching dramatically' },
+];
+
+const LIGHTING_STYLES = [
+    { name: 'Lumière chaude',      prompt: 'warm golden hour backlight' },
+    { name: 'Contre-jour',         prompt: 'strong backlight creating a rim of light around the subject' },
+    { name: 'Lumière latérale',    prompt: 'dramatic side lighting with deep shadows on one side' },
+    { name: 'Lumière douce',       prompt: 'soft diffused natural light, almost shadowless' },
+    { name: 'Clair de lune',       prompt: 'cool moonlight atmosphere, blue tones' },
+    { name: 'Bougie',              prompt: 'warm interior candlelight flicker' },
+    { name: 'Néon',                prompt: 'neon lighting with pink and blue color separation' },
+    { name: 'Rim light',           prompt: 'cinematic rim lighting emphasizing the silhouette' },
+    { name: 'Fenêtre pluie',       prompt: 'light through a rain-streaked window, moving shadows' },
+    { name: 'Flamme vacillante',   prompt: 'flickering firelight, warm and dynamic' },
+];
+
+const ACTION_STYLES = [
+    { name: 'Particules dorées',   prompt: 'golden dust particles floating in the air around the subject' },
+    { name: 'Lucioles',            prompt: 'fireflies floating slowly around the scene, glowing softly' },
+    { name: 'Pétales',             prompt: 'cherry blossom petals drifting through the air' },
+    { name: 'Neige',               prompt: 'soft snowflakes falling slowly around the subject' },
+    { name: 'Pluie',               prompt: 'gentle rain falling, drops visible against the light' },
+    { name: 'Feuilles d\'automne', prompt: 'autumn leaves drifting through the air' },
+    { name: 'Brouillard rampant',  prompt: 'low rolling fog creeping across the ground' },
+    { name: 'Étincelles',          prompt: 'warm sparks rising and floating through the frame' },
+    { name: 'Vapeur',              prompt: 'soft steam rising slowly from the ground' },
+    { name: 'Fumée',               prompt: 'wisps of smoke drifting slowly through the air' },
+    { name: 'Bulles',              prompt: 'transparent bubbles floating gently upward through the frame' },
+    { name: 'Plumes',              prompt: 'white feathers drifting slowly through the air' },
+    { name: 'Confettis',           prompt: 'colorful confetti falling slowly through the frame' },
+    { name: 'Éclairs lointains',   prompt: 'distant lightning flashes illuminating the sky' },
+    { name: 'Aurore boréale',      prompt: 'aurora borealis shimmering in the sky above' },
+    { name: 'Oiseaux',             prompt: 'birds flying across the background sky' },
+    { name: 'Poussière lumineuse', prompt: 'dust motes dancing in beams of light' },
+    { name: 'Aucune',              prompt: '' },
+];
+
+// ══════════════════════════════════════════════════════════════════
+// UNIVERS ACTIVABLES (toggles UI)
+// ══════════════════════════════════════════════════════════════════
+const UNIVERSES = [
+    { id: 'ambiance',  name: 'Ambiances',       emoji: '🎭', list: AMBIANCE_STYLES,  default: true },
+    { id: 'transform', name: 'Transformations', emoji: '🎨', list: TRANSFORM_STYLES, default: true },
+    { id: 'movement',  name: 'Mouvements',      emoji: '🏃', list: MOVEMENT_STYLES,  default: true },
+    { id: 'camera',    name: 'Caméras',         emoji: '🎥', list: CAMERA_STYLES,    default: true },
+    { id: 'lighting',  name: 'Lumières',        emoji: '💡', list: LIGHTING_STYLES,  default: true },
+    { id: 'action',    name: 'Actions',         emoji: '✨', list: ACTION_STYLES,    default: true },
+];
+
+// ══════════════════════════════════════════════════════════════════
+// ÉTAT GLOBAL
+// ══════════════════════════════════════════════════════════════════
+const state = {
+    apiKey: '',
+    imageFile: null,
+    imageDataUrl: null,
+    count: 5,
+    format: '9:16',
+    enabledUniverses: new Set(UNIVERSES.filter(u => u.default).map(u => u.id)),
+    generating: false,
+    stopRequested: false,
+    videoJobs: [],
+};
+
+// ══════════════════════════════════════════════════════════════════
+// HELPERS DOM
+// ══════════════════════════════════════════════════════════════════
+const $ = (id) => document.getElementById(id);
+const els = {
+    apiInput:          $('api-key-input'),
+    apiSaveBtn:        $('api-save-btn'),
+    apiStatus:         $('api-status'),
+    apiStatusText:     $('api-status-text'),
+    uploadZone:        $('upload-zone'),
+    fileInput:         $('file-input'),
+    previewContainer:  $('preview-container'),
+    countRange:        $('count-range'),
+    countDisplay:      $('count-display'),
+    toggles:           $('toggles'),
+    generateBtn:       $('generate-btn'),
+    stopBtn:           $('stop-btn'),
+    queue:             $('queue'),
+    gallerySection:    $('gallery-section'),
+    galleryGrid:       $('gallery-grid'),
+    statusBar:         $('status-bar'),
+    statusText:        $('status-text'),
+    toast:             $('toast'),
+    toastText:         $('toast-text'),
+};
+
+// ══════════════════════════════════════════════════════════════════
+// UTILITAIRES
+// ══════════════════════════════════════════════════════════════════
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const rand  = (n) => Math.floor(Math.random() * n);
+const pick  = (arr) => arr[rand(arr.length)];
+
+let toastTimer = null;
+function toast(message, type = '') {
+    els.toastText.textContent = message;
+    els.toast.className = 'toast visible' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        els.toast.classList.remove('visible');
+    }, 3200);
+}
+
+function setStatus(text) {
+    if (!text) {
+        els.statusBar.classList.remove('visible');
+    } else {
+        els.statusText.textContent = text;
+        els.statusBar.classList.add('visible');
+    }
+}
+
+function setApiStatus(text, ok = false) {
+    els.apiStatusText.textContent = text;
+    els.apiStatus.classList.toggle('ok', ok);
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CLÉ API
+// ══════════════════════════════════════════════════════════════════
+function loadApiKey() {
+    const saved = localStorage.getItem(API_KEY_STORAGE);
+    if (saved) {
+        state.apiKey = saved;
+        els.apiInput.value = saved;
+        setApiStatus('Clé enregistrée (' + saved.slice(0, 6) + '…' + saved.slice(-4) + ')', true);
+    }
+    refreshGenerateButton();
+}
+
+function saveApiKey() {
+    const val = els.apiInput.value.trim();
+    if (!val) {
+        state.apiKey = '';
+        localStorage.removeItem(API_KEY_STORAGE);
+        setApiStatus('Aucune clé API enregistrée');
+        refreshGenerateButton();
+        return;
+    }
+    if (!val.startsWith('sk-')) {
+        toast('La clé doit commencer par « sk- »', 'warn');
+        return;
+    }
+    state.apiKey = val;
+    localStorage.setItem(API_KEY_STORAGE, val);
+    setApiStatus('Clé enregistrée (' + val.slice(0, 6) + '…' + val.slice(-4) + ')', true);
+    toast('Clé API enregistrée', 'success');
+    refreshGenerateButton();
+}
+
+els.apiSaveBtn.addEventListener('click', saveApiKey);
+els.apiInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveApiKey(); }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// UPLOAD IMAGE
+// ══════════════════════════════════════════════════════════════════
+els.uploadZone.addEventListener('click', () => {
+    if (!state.generating) els.fileInput.click();
+});
+
+els.fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    await handleImage(file);
+});
+
+async function handleImage(file) {
+    if (!file.type.startsWith('image/')) {
+        toast('Choisis un fichier image', 'error');
+        return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+        toast('Image trop lourde (max ' + Math.round(MAX_IMAGE_SIZE / 1024 / 1024) + ' Mo)', 'error');
+        return;
+    }
+    try {
+        const dataUrl = await readFileAsDataURL(file);
+        state.imageFile = file;
+        state.imageDataUrl = dataUrl;
+        renderPreview();
+        refreshGenerateButton();
+        toast('Photo ajoutée', 'success');
+    } catch (err) {
+        console.error(err);
+        toast('Impossible de lire l\'image', 'error');
+    }
+}
+
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+    });
+}
+
+function renderPreview() {
+    els.previewContainer.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'preview-wrap';
+    const img = document.createElement('img');
+    img.src = state.imageDataUrl;
+    img.alt = 'Aperçu';
+    const ov = document.createElement('div');
+    ov.className = 'replace-overlay';
+    ov.textContent = '🔄 Appuie pour changer de photo';
+    ov.addEventListener('click', () => {
+        if (!state.generating) els.fileInput.click();
+    });
+    wrap.appendChild(img);
+    wrap.appendChild(ov);
+    els.previewContainer.appendChild(wrap);
+    els.uploadZone.classList.add('has-image');
+    els.uploadZone.style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOGGLES UNIVERS
+// ══════════════════════════════════════════════════════════════════
+function renderToggles() {
+    els.toggles.innerHTML = '';
+    UNIVERSES.forEach(u => {
+        const el = document.createElement('div');
+        el.className = 'toggle' + (state.enabledUniverses.has(u.id) ? ' on' : '');
+        el.dataset.id = u.id;
+        el.innerHTML = `<span class="t-check">✓</span><span>${u.emoji} ${u.name}</span>`;
+        el.addEventListener('click', () => {
+            if (state.enabledUniverses.has(u.id)) {
+                state.enabledUniverses.delete(u.id);
+                el.classList.remove('on');
+            } else {
+                state.enabledUniverses.add(u.id);
+                el.classList.add('on');
+            }
+        });
+        els.toggles.appendChild(el);
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// COMPTEUR
+// ══════════════════════════════════════════════════════════════════
+els.countRange.addEventListener('input', () => {
+    state.count = parseInt(els.countRange.value, 10);
+    els.countDisplay.textContent = state.count;
+});
+
+// ══════════════════════════════════════════════════════════════════
+// FORMAT
+// ══════════════════════════════════════════════════════════════════
+document.querySelectorAll('.toggle[data-format]').forEach(el => {
+    el.addEventListener('click', () => {
+        document.querySelectorAll('.toggle[data-format]').forEach(o => o.classList.remove('on'));
+        el.classList.add('on');
+        state.format = el.dataset.format;
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// BOUTON GÉNÉRER
+// ══════════════════════════════════════════════════════════════════
+function refreshGenerateButton() {
+    const ready = !!state.apiKey && !!state.imageDataUrl && !state.generating;
+    els.generateBtn.disabled = !ready;
+}
+
+els.generateBtn.addEventListener('click', startGeneration);
+
+els.stopBtn.addEventListener('click', () => {
+    state.stopRequested = true;
+    setStatus('Arrêt demandé…');
+});
+
+// ══════════════════════════════════════════════════════════════════
+// GÉNÉRATION D'UN PROMPT ALÉATOIRE
+// ══════════════════════════════════════════════════════════════════
+function buildRandomPrompt() {
+    const enabled = UNIVERSES.filter(u => state.enabledUniverses.has(u.id));
+    if (enabled.length === 0) return null;
+
+    const chosen = {};
+    for (const u of enabled) {
+        chosen[u.id] = pick(u.list);
+    }
+
+    const parts = [];
+    const labels = [];
+
+    if (chosen.transform && chosen.transform.prompt) {
+        parts.push(chosen.transform.prompt);
+        if (chosen.transform.id !== 'none') {
+            labels.push(chosen.transform.emoji + ' ' + chosen.transform.name);
+        }
+    }
+    if (chosen.ambiance && chosen.ambiance.prompt) {
+        parts.push(chosen.ambiance.prompt);
+        labels.push(chosen.ambiance.emoji + ' ' + chosen.ambiance.name);
+    }
+    if (chosen.lighting) {
+        parts.push(chosen.lighting.prompt);
+        labels.push('💡 ' + chosen.lighting.name);
+    }
+    if (chosen.camera) {
+        parts.push(chosen.camera.prompt);
+        labels.push('🎥 ' + chosen.camera.name);
+    }
+    if (chosen.movement) {
+        parts.push(chosen.movement.prompt);
+        labels.push('🏃 ' + chosen.movement.name);
+    }
+    if (chosen.action && chosen.action.prompt) {
+        parts.push(chosen.action.prompt);
+        labels.push('✨ ' + chosen.action.name);
+    }
+
+    parts.push('smooth natural motion, high quality, ultra detailed, consistent subject, cinematic composition, 5 seconds, seamless loop');
+
+    return {
+        prompt: parts.join(', '),
+        label: labels.join(' · ') || 'Style aléatoire',
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// APPELS API
+// ══════════════════════════════════════════════════════════════════
+async function apiCreateVideo(prompt, imageDataUrl, format) {
+    const body = {
+        model: MODEL_VIDEO,
+        prompt,
+        image: imageDataUrl,
+        aspect_ratio: format,
+        frame_rate: FRAME_RATE,
+        duration: 5,
+    };
+    const res = await fetch(API_BASE + '/videos', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + state.apiKey,
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error('Création vidéo : HTTP ' + res.status + ' — ' + txt.slice(0, 200));
+    }
+    const data = await res.json();
+    const d = data.data || data;
+    const id = d.id || d.task_id || d.taskId || d.job_id;
+    if (!id) throw new Error('Pas d\'ID de tâche dans la réponse');
+    return id;
+}
+
+async function apiPollVideo(taskId) {
+    const res = await fetch(POLL_BASE + '/task/' + encodeURIComponent(taskId), {
+        headers: { 'Authorization': 'Bearer ' + state.apiKey },
+    });
+    if (!res.ok) throw new Error('Poll : HTTP ' + res.status);
+    const data = await res.json();
+    const d = data.data || data;
+    const status = String(d.status || d.state || '').toLowerCase();
+    const url = d.video_url || d.videoUrl || d.url ||
+                (d.output && (d.output.url || d.output.video_url)) ||
+                (d.result && (d.result.url || d.result.video_url)) || null;
+    return { status, url };
+}
+
+const STATUS_DONE    = new Set(['succeeded', 'success', 'completed', 'complete', 'done', 'finished']);
+const STATUS_FAIL    = new Set(['failed', 'error', 'canceled', 'cancelled']);
+
+async function waitForVideo(taskId, onStatus) {
+    for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+        if (state.stopRequested) throw new Error('Arrêté par l\'utilisateur');
+
+        let r;
+        try {
+            r = await apiPollVideo(taskId);
+        } catch (e) {
+            console.warn('Poll error', e);
+            await sleep(POLL_INTERVAL_SEC * 1000);
+            continue;
+        }
+
+        if (STATUS_DONE.has(r.status) && r.url) return r.url;
+        if (STATUS_FAIL.has(r.status)) throw new Error('Tâche échouée (' + r.status + ')');
+
+        if (onStatus) onStatus(r.status);
+        await sleep(POLL_INTERVAL_SEC * 1000);
+    }
+    throw new Error('Timeout : la vidéo n\'a pas été générée à temps');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FILE D'ATTENTE UI
+// ══════════════════════════════════════════════════════════════════
+function createQueueItem(index, label) {
+    const el = document.createElement('div');
+    el.className = 'queue-item pending';
+    el.innerHTML =
+        '<div class="q-icon">⏳</div>' +
+        '<div class="q-info">' +
+            '<div class="q-name">Vidéo ' + index + '</div>' +
+            '<div class="q-style">' + escapeHtml(label) + '</div>' +
+        '</div>' +
+        '<div class="q-status">En attente</div>';
+    return el;
+}
+
+function updateQueueItem(el, { status, icon, statusText }) {
+    if (status)   el.className = 'queue-item ' + status;
+    if (icon)     el.querySelector('.q-icon').textContent = icon;
+    if (statusText !== undefined) el.querySelector('.q-status').textContent = statusText;
+}
+
+function updateQueueSummary(total, done, failed, running) {
+    let summary = document.getElementById('queue-summary');
+    if (!summary) {
+        summary = document.createElement('div');
+        summary.id = 'queue-summary';
+        summary.className = 'queue-summary';
+        els.queue.insertBefore(summary, els.queue.firstChild);
+    }
+    summary.innerHTML =
+        '<span class="progress-text">' + (done + failed) + ' / ' + total + ' terminées</span>' +
+        '<span>' + (running ? running + ' en cours' : '—') + '</span>' +
+        '<span>' + (failed ? '❌ ' + failed + ' échec' + (failed > 1 ? 's' : '') : '') + '</span>';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GALERIE
+// ══════════════════════════════════════════════════════════════════
+function addToGallery(videoUrl, label) {
+    els.gallerySection.style.display = '';
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+
+    const video = document.createElement('video');
+    video.src = videoUrl;
+    video.controls = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.loop = true;
+    video.preload = 'metadata';
+
+    const cap = document.createElement('div');
+    cap.className = 'g-caption';
+    cap.innerHTML = '<strong>#' + (els.galleryGrid.children.length + 1) + '</strong>' + escapeHtml(label);
+
+    item.appendChild(video);
+    item.appendChild(cap);
+    els.galleryGrid.appendChild(item);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BOUCLE PRINCIPALE DE GÉNÉRATION
+// ══════════════════════════════════════════════════════════════════
+async function startGeneration() {
+    if (state.generating) return;
+    if (!state.apiKey) { toast('Enregistre d\'abord ta clé API', 'warn'); return; }
+    if (!state.imageDataUrl) { toast('Ajoute une photo', 'warn'); return; }
+    if (state.enabledUniverses.size === 0) { toast('Active au moins un univers', 'warn'); return; }
+
+    state.generating = true;
+    state.stopRequested = false;
+    refreshGenerateButton();
+    els.generateBtn.textContent = 'Génération en cours…';
+    els.stopBtn.classList.add('visible');
+
+    els.queue.style.display = '';
+    els.queue.innerHTML = '';
+    els.galleryGrid.innerHTML = '';
+    els.gallerySection.style.display = 'none';
+
+    const total = state.count;
+    const jobs = [];
+
+    for (let i = 0; i < total; i++) {
+        const rp = buildRandomPrompt();
+        if (!rp) { toast('Impossible de construire un prompt', 'error'); break; }
+        const el = createQueueItem(i + 1, rp.label);
+        els.queue.appendChild(el);
+        jobs.push({ index: i + 1, el, ...rp, videoUrl: null, taskId: null });
+    }
+    state.videoJobs = jobs;
+    updateQueueSummary(jobs.length, 0, 0, 0);
+
+    let done = 0, failed = 0;
+
+    for (let i = 0; i < jobs.length; i++) {
+        if (state.stopRequested) break;
+        const job = jobs[i];
+
+        updateQueueItem(job.el, { status: 'creating', icon: '📤', statusText: 'Envoi…' });
+        setStatus('Envoi vidéo ' + job.index + ' / ' + jobs.length);
+        updateQueueSummary(jobs.length, done, failed, 1);
+
+        try {
+            job.taskId = await apiCreateVideo(job.prompt, state.imageDataUrl, state.format);
+            updateQueueItem(job.el, { status: 'processing', icon: '⚙️', statusText: 'Génération…' });
+
+            const url = await waitForVideo(job.taskId, (s) => {
+                setStatus('Vidéo ' + job.index + ' / ' + jobs.length + ' — ' + (s || 'en cours'));
+            });
+
+            job.videoUrl = url;
+            updateQueueItem(job.el, { status: 'done', icon: '✅', statusText: 'Prête' });
+            addToGallery(url, job.label);
+            done++;
+        } catch (err) {
+            console.error('Job ' + job.index + ' échec :', err);
+            const stopped = /Arrêté/.test(err.message);
+            updateQueueItem(job.el, {
+                status: 'failed',
+                icon: stopped ? '⏹' : '❌',
+                statusText: stopped ? 'Arrêté' : 'Échec',
+            });
+            if (!stopped) {
+                failed++;
+                toast('Vidéo ' + job.index + ' : ' + err.message, 'error');
+            }
+        }
+
+        updateQueueSummary(jobs.length, done, failed, 0);
+
+        if (!state.stopRequested && i < jobs.length - 1) {
+            setStatus('Pause anti rate-limit (' + Math.round(createIntervalMs / 1000) + ' s)…');
+            await sleep(createIntervalMs);
+            createIntervalMs = CREATE_INTERVAL_SAFE +
+                Math.floor(Math.random() * (CREATE_INTERVAL_MAX - CREATE_INTERVAL_SAFE));
+        }
+    }
+
+    state.generating = false;
+    els.generateBtn.textContent = 'Créer les vidéos';
+    els.stopBtn.classList.remove('visible');
+    refreshGenerateButton();
+    setStatus('');
+
+    if (state.stopRequested) {
+        toast('Génération arrêtée (' + done + ' réussie' + (done > 1 ? 's' : '') + ')', 'warn');
+    } else if (failed === 0) {
+        toast('🎉 ' + done + ' vidéo' + (done > 1 ? 's' : '') + ' générée' + (done > 1 ? 's' : ''), 'success');
+    } else {
+        toast(done + ' réussie' + (done > 1 ? 's' : '') + ', ' + failed + ' échec' + (failed > 1 ? 's' : ''), 'warn');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INITIALISATION
+// ══════════════════════════════════════════════════════════════════
+function init() {
+    renderToggles();
+    loadApiKey();
+    els.countDisplay.textContent = els.countRange.value;
+    state.count = parseInt(els.countRange.value, 10);
+    state.format = '9:16';
+
+    ['dragover', 'dragenter'].forEach(ev =>
+        els.uploadZone.addEventListener(ev, (e) => { e.preventDefault(); })
+    );
+    els.uploadZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) await handleImage(f);
+    });
+}
+
+init();
+</script>
+</body>
+</html>
